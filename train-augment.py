@@ -1,8 +1,8 @@
 # This code is released under the CC BY-SA 4.0 license.
 
-# import torch
-# print(torch.cuda.is_available())
 import torch
+print(torch.cuda.is_available())
+
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
