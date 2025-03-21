@@ -4,6 +4,7 @@ import numpy as np
 import SimpleITK as sitk
 from PIL import Image
 import glob
+from skimage.transform import resize
 
 def load_dicom(dicom_path):
     """加载DICOM图像"""
@@ -19,19 +20,42 @@ def load_tiff(tiff_path):
 def normalize_to_uint8(image):
     """将图像归一化到0-255范围并转换为uint8类型"""
     if image.dtype != np.uint8:
-        # 归一化到0-1范围
-        image = (image - image.min()) / (image.max() - image.min())
-        # 转换到0-255范围
-        image = (image * 255).astype(np.uint8)
+        # 处理可能的无效值
+        image = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # 确保图像有有效的值范围
+        if image.max() == image.min():
+            image = np.zeros_like(image, dtype=np.uint8)
+        else:
+            # 归一化到0-1范围
+            image = (image - image.min()) / (image.max() - image.min())
+            # 转换到0-255范围
+            image = (image * 255).astype(np.uint8)
     return image
 
-def create_patches(image, patch_size=(256, 256), stride=128):
-    """使用滑动窗口创建图像块"""
+def resize_image(image, target_size):
+    """调整图像大小，保持宽高比"""
+    h, w = image.shape
+    scale = min(target_size[0]/h, target_size[1]/w)
+    new_h, new_w = int(h*scale), int(w*scale)
+    return resize(image, (new_h, new_w), preserve_range=True)
+
+def create_patches(image, patch_size=(256, 256), stride=256):
+    """使用滑动窗口创建图像块，默认不重叠"""
     patches = []
     h, w = image.shape
     
-    for y in range(0, h - patch_size[0] + 1, stride):
-        for x in range(0, w - patch_size[1] + 1, stride):
+    # 计算可以生成多少个完整的块
+    n_h = h // patch_size[0]
+    n_w = w // patch_size[1]
+    
+    # 计算中心点
+    center_y = (h - n_h * patch_size[0]) // 2
+    center_x = (w - n_w * patch_size[1]) // 2
+    
+    # 从中心开始生成块
+    for y in range(center_y, center_y + n_h * patch_size[0], patch_size[0]):
+        for x in range(center_x, center_x + n_w * patch_size[1], patch_size[1]):
             patch = image[y:y + patch_size[0], x:x + patch_size[1]]
             patches.append(patch)
     
@@ -57,7 +81,7 @@ def get_patient_id(filename):
             return part
     return None
 
-def prepare_dataset(A_dir, B_dir, output_pickle, patch_size=(256, 256), stride=128):
+def prepare_dataset(A_dir, B_dir, output_pickle, patch_size=(256, 256), stride=256):
     """准备训练数据集"""
     dataset = []
     
@@ -98,6 +122,20 @@ def prepare_dataset(A_dir, B_dir, output_pickle, patch_size=(256, 256), stride=1
             print("加载B域图像...")
             B_image = load_tiff(B_path)
             print(f"B域图像形状: {B_image.shape}")
+            
+            # 检查并调整图像大小
+            if A_image.shape != B_image.shape:
+                print("图像大小不一致，进行调整...")
+                # 获取较小的尺寸
+                target_size = (min(A_image.shape[0], B_image.shape[0]),
+                             min(A_image.shape[1], B_image.shape[1]))
+                print(f"调整到目标尺寸: {target_size}")
+                
+                # 调整图像大小
+                A_image = resize_image(A_image, target_size)
+                B_image = resize_image(B_image, target_size)
+                print(f"调整后A域图像形状: {A_image.shape}")
+                print(f"调整后B域图像形状: {B_image.shape}")
             
             # 创建图像块
             print("创建图像块...")

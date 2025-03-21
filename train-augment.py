@@ -1,7 +1,7 @@
 # This code is released under the CC BY-SA 4.0 license.
 
 import torch
-print(torch.cuda.is_available())
+print(f"CUDA是否可用: {torch.cuda.is_available()}")
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
@@ -9,7 +9,6 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 # Check if the environment variable is set
 if os.getenv('KMP_DUPLICATE_LIB_OK') == 'TRUE':
     print("Environment variable set successfully.")
-
 else:
     print("Failed to set environment variable.")
 import time
@@ -20,11 +19,17 @@ from models import create_model
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    # opt.dataroot = r'C:\Users\qzhuang4\Desktop\cycle-transformer\datasets'
-    opt.dataroot = r'C:\Users\qzhuang4\Desktop\cycle-transformer\datasets\trainOrca56.pickle'
-    # opt.dataset_mode = 'unaligned_ct'
-    opt.dataset_mode = 'ct'
-
+    
+    # 根据是否有CUDA设置设备
+    if torch.cuda.is_available():
+        opt.device = 'cuda'
+        opt.gpu_ids = [0]
+    else:
+        opt.device = 'cpu'
+        opt.gpu_ids = []
+    
+    opt.dataroot = 'dataset.pickle'  # 使用我们生成的数据集
+    opt.dataset_mode = 'patch'     # 使用新的patch数据集模式
 
     opt.continue_train = False
     opt.name = 'exp_1'
@@ -33,7 +38,8 @@ if __name__ == '__main__':
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
 
-    print(dataset_size)
+    print(f"数据集大小: {dataset_size}")
+    print(f"使用设备: {opt.device}")
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     # # visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
